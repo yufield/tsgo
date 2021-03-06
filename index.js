@@ -4,6 +4,7 @@
 
 import util from "util";
 import P from 'parsimmon';
+import {ArrayExpression} from "./astNode.js";
 
 ///////////////////////////////////////////////////////////////////////
 
@@ -30,30 +31,35 @@ function interpretEscapes(str) {
 }
 
 // Use the JSON standard's definition of whitespace rather than Parsimmon's.
-let whitespace = P.regexp(/\s*/m);
-
+let optSplit = P.regexp(/(\s|\n)*/);
+let split = P.regexp(/(\s|\n)+/)
+let splitWrapper = parser => parser.skip(split)
+let optSplitWrapper = parser => parser.skip(optSplit)
 // JSON is pretty relaxed about whitespace, so let's make it easy to ignore
 // after most text.
-function token(parser) {
-    return parser.skip(whitespace);
-}
-
 // Several parsers are just strings with optional whitespace.
-function word(str) {
-    return P.string(str).thru(token);
-}
+let word = str => P.string(str).thru(optSplitWrapper)
 
-let JSONParser = P.createLanguage({
-    program: r => P.alt(r.variableStatement, r.value),
-    value: r =>
-        P.alt(r.object, r.array, r.string, r.number, r.null, r.true, r.false).thru(
-            parser => whitespace.then(parser)
+
+let TsgoParser = P.createLanguage({
+    program: r =>
+        optSplit.then(
+            P.alt(
+                r.variableStatement,
+                r.value
+            ).many()
         ),
-    pVariable: () => P.regexp(/[a-z]+/i).thru(token),
-    variableStatement: r => P.seq(word("var").then(r.pVariable).skip(r.equal), r.value).map(seq => ({
-        varName: seq[0],
-        value: seq[1]
-    })),
+    value: r =>
+        P.alt(r.object, r.array, r.string, r.number, r.null, r.true, r.false).thru(optSplitWrapper),
+    pVariable: () => P.regexp(/[a-z]+/i).thru(optSplitWrapper),
+    variableStatement: r => P.seqObj(
+        P.string("var"),
+        split,
+        ["id", r.pVariable],
+        r.equal,
+        ["init", r.value],
+        ["index", P.index]
+    ),
     equal: () => word("="),
     lbrace: () => word("{"),
     rbrace: () => word("}"),
@@ -65,14 +71,14 @@ let JSONParser = P.createLanguage({
     true: () => word("true").result(true),
     false: () => word("false").result(false),
     string: () =>
-        token(P.regexp(/"((?:\\.|.)*?)"/, 1))
+        P.regexp(/"((?:\\.|.)*?)"/, 1).thru(optSplitWrapper)
             .map(interpretEscapes)
             .desc("string"),
     number: () =>
-        token(P.regexp(/-?(0|[1-9][0-9]*)([.][0-9]+)?([eE][+-]?[0-9]+)?/))
+        P.regexp(/-?(0|[1-9][0-9]*)([.][0-9]+)?([eE][+-]?[0-9]+)?/).thru(optSplitWrapper)
             .map(Number)
             .desc("number"),
-    array: r => r.lbracket.then(r.value.sepBy(r.comma)).skip(r.rbracket),
+    array: r => r.lbracket.then(r.value.sepBy(r.comma)).skip(r.rbracket).map(arr => new ArrayExpression(arr)),
     pair: r => P.seq(P.alt(r.pVariable, r.string).skip(r.colon), r.value),
     object: r =>
         r.lbrace
@@ -90,7 +96,7 @@ let JSONParser = P.createLanguage({
 
 ///////////////////////////////////////////////////////////////////////
 
-let text = `\
+let text = ` 
 var a ={
   id: "a thing\\nice\tab",
   "another property!"
@@ -104,6 +110,7 @@ var a ={
     {"": {}}
   ]
 }
+var b="c"
 `;
 
 function prettyPrint(x) {
@@ -112,5 +119,5 @@ function prettyPrint(x) {
     console.log(s);
 }
 
-let ast = JSONParser.program.tryParse(text);
+let ast = TsgoParser.program.tryParse(text);
 prettyPrint(ast);
