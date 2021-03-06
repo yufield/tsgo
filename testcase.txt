@@ -1,0 +1,19 @@
+var a ={
+  id: "a thing\nice	ab",
+
+  "another property!"
+
+    : "also cool"
+
+  , "weird formatting is ok too........😂": 123.45e1,
+  "": [
+
+    true, false, null,
+    "",
+    " ",
+
+    {a:1},
+    {"": {}}
+  ]
+
+}var b="c"
