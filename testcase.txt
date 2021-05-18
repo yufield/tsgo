@@ -16,4 +16,10 @@ var a ={
     {"": {}}
   ]
 
-}var b="c"
+}
+var b="c";func a
+(q,
+a
+){
+var b=1
+}
